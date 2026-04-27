@@ -8,7 +8,8 @@ Shareify Inventory Service
 
 import os
 import uuid
-import sqlite3
+import psycopg2
+from psycopg2.extras import RealDictCursor
 from datetime import datetime, timezone
 from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel
@@ -21,9 +22,7 @@ DATABASE = os.getenv("DATABASE_PATH", "./data/inventory.db")
 
 # ── Database ────────────────────────────────────────────────────────────────
 def get_db():
-    os.makedirs(os.path.dirname(DATABASE) or ".", exist_ok=True)
-    conn = sqlite3.connect(DATABASE)
-    conn.row_factory = sqlite3.Row
+    conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
     return conn
 
 
@@ -198,3 +197,4 @@ def delete_item(item_id: str):
 @app.get("/health")
 def health():
     return {"status": "healthy", "service": "shareify-inventory-service"}
+
