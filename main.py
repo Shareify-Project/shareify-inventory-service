@@ -17,7 +17,7 @@ from pydantic import BaseModel
 app = FastAPI(title="Shareify Inventory Service", version="1.0.0")
 
 # ── Config ──────────────────────────────────────────────────────────────────
-DATABASE = os.getenv("DATABASE_PATH", "./data/inventory.db")
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:shareify-secure-db-pass@postgres-db:5432/inventory_service")
 
 
 # ── Database ────────────────────────────────────────────────────────────────
@@ -197,4 +197,5 @@ def delete_item(item_id: str):
 @app.get("/health")
 def health():
     return {"status": "healthy", "service": "shareify-inventory-service"}
+
 
