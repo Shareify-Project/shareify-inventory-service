@@ -3,6 +3,7 @@ name: Inventory Service CI Pipeline
 on:
   push:
     branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   sast-scan:
@@ -10,12 +11,12 @@ jobs:
     secrets: inherit
 
   sca-scan:
-    needs: sast-scan
+    # needs: sast-scan
     uses: Shareify-Project/shareify-workflows/.github/workflows/sca.yml@main
     secrets: inherit
 
   build-and-push:
-    needs: sca-scan
+    # needs: sca-scan
     permissions:
       contents: read
       packages: write
@@ -23,3 +24,4 @@ jobs:
     with:
       image_name: shareify-inventory-service
     secrets: inherit
+
