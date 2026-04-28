@@ -14,6 +14,20 @@ from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel
 
 app = FastAPI(title="Shareify Inventory Service", version="1.0.0")
+# -- POSTGRESQL HOTFIX: SQLite Polyfill --------------------------------------
+# Automatically translates SQLite conn.execute() and '?' to PostgreSQL syntax
+import psycopg2
+from psycopg2.extensions import connection
+
+def _sqlite_to_psycopg2_execute(self, query, vars=None):
+    if '?' in query:
+        query = query.replace('?', '%s')
+    cursor = self.cursor()
+    cursor.execute(query, vars)
+    return cursor
+
+connection.execute = _sqlite_to_psycopg2_execute
+# ----------------------------------------------------------------------------
 
 # ── Config ──────────────────────────────────────────────────────────────────
 DATABASE = os.getenv("DATABASE_PATH", "./data/inventory.db")
@@ -198,3 +212,4 @@ def delete_item(item_id: str):
 @app.get("/health")
 def health():
     return {"status": "healthy", "service": "shareify-inventory-service"}
+
