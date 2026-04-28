@@ -42,19 +42,17 @@ async def prometheus_middleware(request: Request, call_next):
     
     return response
 
-# -- POSTGRESQL HOTFIX: SQLite Polyfill --------------------------------------
-# Automatically translates SQLite conn.execute() and '?' to PostgreSQL syntax
+# --
+# -- POSTGRESQL HOTFIX: SQLite Polyfill Helper -------------------------------
 import psycopg2
-from psycopg2.extensions import connection
+from psycopg2.extras import RealDictCursor
 
-def _sqlite_to_psycopg2_execute(self, query, vars=None):
+def db_execute(conn, query, vars=None):
     if '?' in query:
         query = query.replace('?', '%s')
-    cursor = self.cursor()
+    cursor = conn.cursor()
     cursor.execute(query, vars)
     return cursor
-
-connection.execute = _sqlite_to_psycopg2_execute
 # ----------------------------------------------------------------------------
 
 # ── Config ──────────────────────────────────────────────────────────────────
@@ -69,13 +67,13 @@ def get_db():
 
 def init_db():
     conn = get_db()
-    conn.execute("""
+    db_execute(conn, """
         CREATE TABLE IF NOT EXISTS inventory (
             item_id TEXT PRIMARY KEY,
             status TEXT NOT NULL DEFAULT 'available'
         )
     """)
-    conn.execute("""
+    db_execute(conn, """
         CREATE TABLE IF NOT EXISTS reservations (
             reservation_id TEXT PRIMARY KEY,
             item_id TEXT NOT NULL,
@@ -114,7 +112,7 @@ class ReleaseRequest(BaseModel):
 # ── Helpers ─────────────────────────────────────────────────────────────────
 def has_overlap(conn, item_id: str, start_date: str, end_date: str) -> bool:
     """Check if any active reservation overlaps with the requested range."""
-    row = conn.execute(
+    row = db_execute(conn, 
         """
         SELECT 1 FROM reservations
         WHERE item_id = ? AND status = 'active'
@@ -132,13 +130,13 @@ def initialize_item(req: InitializeRequest):
     """Called by Item Service when a new item is created."""
     conn = get_db()
     try:
-        existing = conn.execute(
+        existing = db_execute(conn, 
             "SELECT 1 FROM inventory WHERE item_id = ?", (req.item_id,)
         ).fetchone()
         if existing:
             return {"message": "Item already initialized"}
 
-        conn.execute(
+        db_execute(conn, 
             "INSERT INTO inventory (item_id, status) VALUES (?, 'available')",
             (req.item_id,),
         )
@@ -157,7 +155,7 @@ def check_availability(
     conn = get_db()
     try:
         # Check if item exists in inventory
-        inv = conn.execute(
+        inv = db_execute(conn, 
             "SELECT * FROM inventory WHERE item_id = ?", (item_id,)
         ).fetchone()
         if not inv:
@@ -184,7 +182,7 @@ def reserve_item(req: ReserveRequest):
             )
 
         reservation_id = str(uuid.uuid4())
-        conn.execute(
+        db_execute(conn, 
             "INSERT INTO reservations "
             "(reservation_id, item_id, start_date, end_date, booking_id, status, created_at) "
             "VALUES (?, ?, ?, ?, ?, 'active', ?)",
@@ -204,7 +202,7 @@ def reserve_item(req: ReserveRequest):
 def release_reservation(req: ReleaseRequest):
     conn = get_db()
     try:
-        row = conn.execute(
+        row = db_execute(conn, 
             "SELECT * FROM reservations WHERE booking_id = ? AND status = 'active'",
             (req.booking_id,),
         ).fetchone()
@@ -213,7 +211,7 @@ def release_reservation(req: ReleaseRequest):
                 status_code=404, detail="Active reservation not found for this booking"
             )
 
-        conn.execute(
+        db_execute(conn, 
             "UPDATE reservations SET status = 'released' WHERE booking_id = ?",
             (req.booking_id,),
         )
@@ -227,8 +225,8 @@ def release_reservation(req: ReleaseRequest):
 def delete_item(item_id: str):
     conn = get_db()
     try:
-        conn.execute("DELETE FROM inventory WHERE item_id = ?", (item_id,))
-        conn.execute("DELETE FROM reservations WHERE item_id = ?", (item_id,))
+        db_execute(conn, "DELETE FROM inventory WHERE item_id = ?", (item_id,))
+        db_execute(conn, "DELETE FROM reservations WHERE item_id = ?", (item_id,))
         conn.commit()
         return {"message": "Item deleted from inventory"}
     finally:
@@ -238,6 +236,7 @@ def delete_item(item_id: str):
 @app.get("/health")
 def health():
     return {"status": "healthy", "service": "shareify-inventory-service"}
+
 
 
 
